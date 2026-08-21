@@ -184,7 +184,8 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint -c .eslintrc.js --ext .ts ./src"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
