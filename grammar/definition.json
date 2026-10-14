@@ -111,7 +111,7 @@
 		"chars": {
 			"patterns": [{
 				"name": "constant.character.art",
-				"match": "`.`"
+				"match": "'(?:\\\\(?:x[0-9A-Fa-f]{1,2}|.)|[^'\\\\])'"
 			}]
 		},
 		"strings": {
