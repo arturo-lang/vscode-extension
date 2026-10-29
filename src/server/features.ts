@@ -4,6 +4,7 @@ import { URI } from 'vscode-uri';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CompletionItem, CompletionItemKind, Hover, Location, MarkupKind, Position, Range } from 'vscode-languageserver/node';
 import { Structure, tokenAt } from './document';
+import { sourceFunction } from './functions';
 import { Binding, Snapshot } from './protocol';
 import { RuntimeSession } from './session';
 
@@ -32,7 +33,7 @@ function description(binding: Binding): string {
 
 function sourceLabels(document: TextDocument, structure: Structure): Binding[] {
     const source = document.getText();
-    const types = new Map<string, Set<string>>();
+    const candidates = new Map<string, Binding[]>();
     for (let index = 0; index < structure.tokens.length; index++) {
         const label = structure.tokens[index];
         if (label.kind !== 'label') continue;
@@ -53,14 +54,25 @@ function sourceLabels(document: TextDocument, structure: Structure): Binding[] {
         else if (token?.kind === 'literal') type = 'literal';
         else if (token?.kind === 'word' && ['true', 'false', 'maybe'].includes(text)) type = 'logical';
         else if (token?.kind === 'word' && text === 'null') type = 'null';
-        const candidates = types.get(label.name!) ?? new Set<string>();
-        candidates.add(type);
-        types.set(label.name!, candidates);
+        const binding = ['$', 'function'].includes(text)
+            ? sourceFunction(structure.tokens.slice(next).filter(t => t.kind !== 'comment'), source, label.name!) : undefined;
+        const bindings = candidates.get(label.name!) ?? [];
+        bindings.push(binding ?? { name: label.name!, kind: type });
+        candidates.set(label.name!, bindings);
     }
     // Conflicting assignments and expressions need runtime information; do not guess.
-    return [...types].map(([name, candidates]) => ({
-        name, kind: candidates.size === 1 ? [...candidates][0] : 'unknown',
-    }));
+    return [...candidates].map(([name, bindings]) => {
+        const first = bindings[0];
+        return bindings.every(binding => JSON.stringify(binding) === JSON.stringify(first))
+            ? first : { name, kind: 'unknown' };
+    });
+}
+
+// Reflection reports Nothing for user functions even when they leave a value on the stack.
+// Use the source signature for recognized constructors, retaining runtime documentation.
+function functionMetadata(observed: Binding, source: Binding | undefined): Binding {
+    return observed.kind === 'function' && source?.kind === 'function'
+        ? { ...observed, args: source.args, returns: source.returns } : observed;
 }
 
 export function completions(document: TextDocument, structure: Structure, position: Position,
@@ -83,8 +95,11 @@ export function completions(document: TextDocument, structure: Structure, positi
             textEdit: { range: Range.create(document.positionAt(start), document.positionAt(editable ? token!.end : offset)), newText: binding.name },
         });
     };
-    for (const binding of session?.observation?.snapshot.bindings ?? []) add(binding, '0');
-    for (const binding of sourceLabels(document, structure)) add(binding, '1');
+    const labels = sourceLabels(document, structure);
+    for (const binding of session?.observation?.snapshot.bindings ?? []) {
+        add(functionMetadata(binding, labels.find(label => label.name === binding.name)), '0');
+    }
+    for (const binding of labels) add(binding, '1');
     for (const binding of catalog.bindings) add(binding, '2');
     return [...result.values()];
 }
@@ -95,7 +110,9 @@ export function hover(document: TextDocument, structure: Structure, position: Po
     if (!token?.name || !['word', 'symbol', 'literal', 'label'].includes(token.kind)) return null;
     const observed = session?.observation?.snapshot.bindings.find(b => b.name === token.name);
     const builtin = catalog.bindings.find(b => b.name === token.name);
-    const binding = observed ?? builtin ?? sourceLabels(document, structure).find(b => b.name === token.name);
+    const local = sourceLabels(document, structure).find(b => b.name === token.name);
+    const binding = observed ? functionMetadata(observed, local)
+        : local?.kind === 'function' ? local : builtin ?? local;
     if (!binding) return null;
     return { contents: { kind: MarkupKind.Markdown, value: description(binding) },
         range: Range.create(document.positionAt(token.start), document.positionAt(token.end)) };

@@ -96,6 +96,16 @@ test('standard stdio source features work without trust or an installed runtime 
             expect(hover.contents.value).toContain('print given value to screen with newline');
             expect(hover.contents.value).toContain('Returns: Nothing');
             expect(hover.contents.value).not.toContain('Default library documentation');
+            rpc.notify('textDocument/didChange', {
+                textDocument: { uri: file, version: 2 },
+                contentChanges: [{ text: 'double: $[x :integer][ x * 2 ]\ndouble' }],
+            });
+            const userFunction = await rpc.request('textDocument/hover', {
+                textDocument: { uri: file }, position: { line: 1, character: 2 },
+            });
+            expect(userFunction.contents.value)
+                .toBe('```art\ndouble x :integer\n```\n\nFunction\n\nReturns: Integer');
+
         }
         const result = await rpc.request('workspace/executeCommand', { 
             command: 'arturo.runtime.refresh', arguments: [folder.uri] 

@@ -53,6 +53,8 @@ Subscribe to the custom `arturo/runtimeStatus` notification. Its fields are `wor
 
 Hover and completion documentation show signatures, kinds, descriptions, attributes, and returns without runtime provenance or freshness warnings. Completion details show the binding kind; source-only labels infer direct literal types and show `:unknown` for expressions or conflicting assignments. Value hovers use compact signatures such as `greeting :string`. Clients should display runtime freshness separately, as VS Code does in its runtime status bar and tooltip. Stale snapshots remain available for hover and completion until replaced by a successful refresh.
 
+Source functions declared with `$[parameters][body]` or `function [parameters][body]` expose their parameter names and type constraints in hover and completion. For example, `double: $[x :integer][x * 2]` shows `double x :integer` and `Returns: Integer` without executing the function. Untyped parameters accept `:any`. Return inference covers simple literals, parameter references, arithmetic (`+`, `-`, `*`, `add`, `sub`, `mul`), and simple explicit `return` expressions. Complex bodies and control flow show `Returns: Unknown`.
+
 Function signatures use Arturo code blocks to preserve alignment, following the [official library reference](https://arturo-lang.io/documentation/library/core/function/): the first argument follows the function name, subsequent arguments align below it, and accepted types appear as lowercase colon-prefixed names (for example, `:literal :block`). Attribute types and returns retain their readable names (for example, `.import (Block)` and `Returns: Function`).
 
 ## Observations and limits
