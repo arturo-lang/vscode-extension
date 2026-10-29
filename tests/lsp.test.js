@@ -92,7 +92,10 @@ test('standard stdio source features work without trust or an installed runtime 
             const hover = await rpc.request('textDocument/hover', { 
                 textDocument: { uri: file }, position: { line: 2, character: 4 } 
             });
-            expect(hover.contents.value).toContain('Default library documentation');
+            expect(hover.contents.value).toStartWith('```art\nprint value :any\n```\n\nFunction');
+            expect(hover.contents.value).toContain('print given value to screen with newline');
+            expect(hover.contents.value).toContain('Returns: Nothing');
+            expect(hover.contents.value).not.toContain('Default library documentation');
         }
         const result = await rpc.request('workspace/executeCommand', { 
             command: 'arturo.runtime.refresh', arguments: [folder.uri] 
@@ -115,6 +118,8 @@ test('standard stdio source features work without trust or an installed runtime 
     await fs.writeFile(path.join(root, 'two', 'main.art'), 'otherWorkspace: 1');
     const rpc = await client(folders, true, settings);
     const refresh = folder => rpc.request('workspace/executeCommand', { command: 'arturo.runtime.refresh', arguments: [folder.uri] });
+    const runtimeStatus = folder => rpc.notifications.filter(n =>
+        n.method === 'arturo/runtimeStatus' && n.params.workspaceUri === folder.uri).at(-1)?.params;
     
     try {
         const file = uri(one), query = { textDocument: { uri: file }, position: { line: 0, character: 0 } };
@@ -124,13 +129,15 @@ test('standard stdio source features work without trust or an installed runtime 
         await rpc.request('textDocument/completion', query);
         await expect(fs.stat(marker)).rejects.toThrow();
 
-        expect((await refresh(folders[0])).state).toBe('ready');
+        const ready = await refresh(folders[0]);
+        expect(ready.state).toBe('ready');
+        expect(runtimeStatus(folders[0])).toEqual(ready);
+        expect(ready.timestamp).toBeString();
         expect(await fs.readFile(marker, 'utf8')).toBe('executed');
 
         let hover = await rpc.request('textDocument/hover', query);
 
-        expect(hover.contents.value).toContain('Observed globals');
-        expect(hover.contents.value).not.toContain('STALE');
+        expect(hover.contents.value).toBe('runtimeOnly\n\nInteger');
 
         await refresh(folders[1]);
         const items = await rpc.request('textDocument/completion', query);
@@ -140,13 +147,29 @@ test('standard stdio source features work without trust or an installed runtime 
         rpc.notify('textDocument/didChange', { textDocument: { uri: file, version: 2 }, contentChanges: [{ text: 'runtimeOnly' }] });
         hover = await rpc.request('textDocument/hover', query);
         
-        expect(hover.contents.value).toContain('STALE');
+        expect(hover.contents.value).toBe('runtimeOnly\n\nInteger');
+        expect(runtimeStatus(folders[0])).toMatchObject({
+            state: 'stale', staleReason: 'Document content changed or opened; refresh to observe saved files',
+        });
         expect((await refresh(folders[0])).state).toBe('stale');
+        expect(runtimeStatus(folders[0])).toMatchObject({
+            state: 'stale', staleReason: 'Unsaved buffers differ from the executed files',
+        });
+        const staleItems = await rpc.request('textDocument/completion', query);
+        const runtimeItem = staleItems.find(item => item.label === 'runtimeOnly');
+        expect(runtimeItem.detail).toBe('Integer');
+        expect(runtimeItem.documentation.value).toBe('runtimeOnly\n\nInteger');
         
         rpc.notify('workspace/didChangeWatchedFiles', { changes: [{ uri: uri(path.join(root, 'one', 'dependency.art')), type: 2 }] });
         hover = await rpc.request('textDocument/hover', query);
         
-        expect(hover.contents.value).toContain('Workspace files changed');
+        expect(hover.contents.value).toBe('runtimeOnly\n\nInteger');
+        expect(runtimeStatus(folders[0])).toMatchObject({ state: 'stale', staleReason: 'Workspace files changed' });
+
+        rpc.notify('workspace/didChangeConfiguration', { settings: {} });
+        hover = await rpc.request('textDocument/hover', query);
+        expect(hover.contents.value).toBe('runtimeOnly\n\nInteger');
+        expect(runtimeStatus(folders[0])).toMatchObject({ state: 'stale', staleReason: 'Runtime configuration changed' });
         
         settings.set(folders[0].uri, { ...settings.get(folders[0].uri), entrypoint: 'slow.art' });
         await fs.writeFile(path.join(root, 'one', 'slow.art'), 'while [true][]');
@@ -165,7 +188,8 @@ test('a minimal LSP client needs no configuration or workspace-folder capabiliti
         const file = uri(path.join(os.tmpdir(), 'minimal.art'));
         rpc.notify('textDocument/didOpen', { textDocument: { uri: file, languageId: 'art', version: 1, text: 'print' } });
         const result = await rpc.request('textDocument/hover', { textDocument: { uri: file }, position: { line: 0, character: 2 } });
-        expect(result.contents.value).toContain('Default library documentation');
+        expect(result.contents.value).toContain('print given value to screen with newline');
+        expect(result.contents.value).not.toContain('Default library documentation');
     } finally { await rpc.close(); }
 });
 

@@ -15,7 +15,7 @@ bun run test
 
 Tests exercise the structural model, real Arturo execution, and a bare JSON-RPC client talking to the compiled server over stdio. Runtime tests require Arturo 0.10.0 on PATH (or `ARTURO=/absolute/path`); they explicitly skip when it is unavailable. Structural and untrusted-client tests still run. CI runs those portable tests; run the full suite with Arturo locally before changing the harness. VS Code integration can be checked by launching the extension host with F5, opening each Arturo language variant, configuring an entrypoint, refreshing, editing, and cancelling a long-running refresh.
 
-`resources/builtins.json` is an offline metadata catalog generated from Arturo 0.10.0's reflection API. To regenerate it after validating a runtime change, run `bun run catalog`. This executes only the bundled harness against an empty block, never a workspace entrypoint. Its version is included in fallback documentation. The current adapter deliberately accepts only Arturo 0.10.0; other versions fail visibly until compatibility is tested.
+`resources/builtins.json` is an offline metadata catalog generated from Arturo 0.10.0's reflection API. To regenerate it after validating a runtime change, run `bun run catalog`. This executes only the bundled harness against an empty block, never a workspace entrypoint. The catalog records its runtime version; hover and completion show only language documentation. The current adapter deliberately accepts only Arturo 0.10.0; other versions fail visibly until compatibility is tested.
 
 The extension requires VS Code 1.82.0 because that is the minimum supported by Microsoft's `vscode-languageclient` 9.0.1. The language client, server, text-document, and URI dependencies are official Microsoft packages.
 
@@ -50,6 +50,10 @@ Paths for `entrypoint` and `cwd` resolve relative to the workspace folder, indep
 Send standard `workspace/executeCommand` requests with command `arturo.runtime.refresh` or `arturo.runtime.cancel`. The first argument is the workspace folder URI; it can be omitted for a single-folder workspace. Commands return the current runtime status. Refresh performs real project execution, including normal side effects, only in response to that explicit request. Other protocol requests never execute project code.
 
 Subscribe to the custom `arturo/runtimeStatus` notification. Its fields are `workspaceUri`, `generation`, `state`, and optional `timestamp`, `entrypoint`, `staleReason`, and `message`. States are `idle`, `running`, `ready`, `stale`, `failed`, and `cancelled`. Generation numbers are monotonic per folder; cancellation also advances them. Timestamps identify the last successful observation. Runtime/program output is delivered through standard `window/logMessage` notifications, separately from protocol framing. These messages may contain the entrypoint's own output.
+
+Hover and completion documentation show signatures, kinds, descriptions, attributes, and returns without runtime provenance or freshness warnings. Completion details show the binding kind; source-only labels show line locations. Clients should display runtime freshness separately, as VS Code does in its runtime status bar and tooltip. Stale snapshots remain available for hover and completion until replaced by a successful refresh.
+
+Function signatures use Arturo code blocks to preserve alignment, following the [official library reference](https://arturo-lang.io/documentation/library/core/function/): the first argument follows the function name, subsequent arguments align below it, and accepted types appear as lowercase colon-prefixed names (for example, `:literal :block`). Attribute types and returns retain their readable names (for example, `.import (Block)` and `Returns: Function`).
 
 ## Observations and limits
 

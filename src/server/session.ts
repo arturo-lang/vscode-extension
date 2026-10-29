@@ -84,13 +84,4 @@ export class RuntimeSession {
             if (generation === this.generation) this.active = undefined;
         }
     }
-
-    get evidence(): string | undefined {
-        const observation = this.observation;
-        if (!observation) return;
-        return `Observed globals after ${observation.entrypoint} completed at ${observation.timestamp}`
-            + ` (Arturo ${observation.snapshot.runtimeVersion}, generation ${observation.generation}).`
-            + (this.status.state !== 'ready' ? ` STALE: ${this.status.staleReason ?? this.status.state}.` : '')
-            + ' This does not establish the binding at this cursor or inside an uncalled function.';
-    }
 }

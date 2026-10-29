@@ -80,7 +80,7 @@ const available = spawnSync(executable, ['--version'], { encoding: 'utf8' }).std
         await session.refresh(settings, false);
         expect(session.status.state).toBe('ready');
         session.invalidate('Edited file');
-        expect(session.evidence).toContain('STALE');
+        expect(notifications.at(-1)).toMatchObject({ state: 'stale', staleReason: 'Edited file' });
         const firstObservation = session.observation;
         await session.refresh(await setup('missing'), false);
         expect(session.observation).toBe(firstObservation);

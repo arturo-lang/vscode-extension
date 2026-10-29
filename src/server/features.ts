@@ -11,16 +11,34 @@ export async function loadCatalog(): Promise<Snapshot> {
     return JSON.parse(await fs.readFile(path.resolve(__dirname, '../../resources/builtins.json'), 'utf8')) as Snapshot;
 }
 const escaped = (value: string) => value.replace(/[\\`*_{}\[\]()<>#!|]/g, '\\$&');
-function description(binding: Binding, evidence: string): string {
-    const signature = binding.args ? `${binding.name} ${Object.entries(binding.args)
-        .map(([name, types]) => `${name} (${types.join(', ')})`).join(' ')}` : binding.name;
+const displayKind = (binding: Binding) => binding.kind.charAt(0).toUpperCase() + binding.kind.slice(1);
+function description(binding: Binding): string {
+    const args = Object.entries(binding.args ?? {}).map(([name, types]) =>
+        [name, ...types.map(type => `:${type.toLowerCase()}`)].join(' '));
+    const signature = args.length
+        ? `${binding.name} ${args.join(`\n${' '.repeat(binding.name.length + 1)}`)}` : binding.name;
+    // A code block preserves argument alignment and Arturo type syntax in Markdown.
+    const fence = '`'.repeat(Math.max(3, ...Array.from(signature.matchAll(/`+/g), match => match[0].length + 1)));
+    const usage = binding.kind === 'function' || args.length
+        ? `${fence}art\n${signature}\n${fence}` : escaped(signature);
     const attributes = Object.entries(binding.attrs ?? {}).map(([name, attr]) =>
         `.${name} (${attr.types.join(', ')})${attr.description ? `: ${attr.description}` : ''}`);
-    return `${escaped(signature)}\n\nObserved/documented kind: ${escaped(binding.kind)}.`
+    return `${usage}\n\n${escaped(displayKind(binding))}`
         + (binding.description ? `\n\n${escaped(binding.description)}` : '')
-        + (attributes.length ? `\n\nAttributes:\n${attributes.map(a => `\n- ${escaped(a)}`).join('')}` : '')
-        + (binding.returns ? `\n\nReported returns: ${escaped(binding.returns.join(', '))}.` : '')
-        + `\n\n${escaped(evidence)}`;
+        + (attributes.length ? `\n\nAttributes:\n\n${attributes.map(a => `- ${escaped(a)}`).join('\n')}` : '')
+        + (binding.returns?.length ? `\n\nReturns: ${escaped(binding.returns.join(', '))}` : '');
+}
+
+function sourceLabels(document: TextDocument, structure: Structure): Binding[] {
+    const locations = new Map<string, Set<number>>();
+    for (const label of structure.labels) {
+        const lines = locations.get(label.name!) ?? new Set<number>();
+        lines.add(document.positionAt(label.start).line + 1);
+        locations.set(label.name!, lines);
+    }
+    return [...locations].map(([name, lines]) => ({
+        name, kind: 'source label', description: `${lines.size === 1 ? 'Line' : 'Lines'}: ${[...lines].join(', ')}`,
+    }));
 }
 
 export function completions(document: TextDocument, structure: Structure, position: Position,
@@ -33,21 +51,19 @@ export function completions(document: TextDocument, structure: Structure, positi
     const prefix = editable
         ? document.getText().slice(token.start + (document.getText()[token.start] === "'" ? 1 : 0), offset).replace(/:$/, '') : '';
     const result = new Map<string, CompletionItem>();
-    const add = (binding: Binding, evidence: string, priority: string) => {
+    const add = (binding: Binding, priority: string) => {
         if (result.has(binding.name) || !binding.name.startsWith(prefix)) return;
         const start = editable ? token!.start + (document.getText()[token!.start] === "'" ? 1 : 0) : offset;
         result.set(binding.name, {
             label: binding.name, kind: binding.kind === 'function' ? CompletionItemKind.Function : CompletionItemKind.Variable,
-            detail: evidence, sortText: priority + binding.name,
-            documentation: { kind: MarkupKind.Markdown, value: description(binding, evidence) },
+            detail: displayKind(binding), sortText: priority + binding.name,
+            documentation: { kind: MarkupKind.Markdown, value: description(binding) },
             textEdit: { range: Range.create(document.positionAt(start), document.positionAt(editable ? token!.end : offset)), newText: binding.name },
         });
     };
-    for (const binding of session?.observation?.snapshot.bindings ?? []) add(binding, session!.evidence!, '0');
-    for (const label of structure.labels) add({ name: label.name!, kind: 'unknown' },
-        'Source label candidate; may be data or never executed', '1');
-    for (const binding of catalog.bindings) add(binding,
-        `Default library documentation, Arturo ${catalog.runtimeVersion}; runtime binding may differ`, '2');
+    for (const binding of session?.observation?.snapshot.bindings ?? []) add(binding, '0');
+    for (const binding of sourceLabels(document, structure)) add(binding, '1');
+    for (const binding of catalog.bindings) add(binding, '2');
     return [...result.values()];
 }
 
@@ -56,15 +72,10 @@ export function hover(document: TextDocument, structure: Structure, position: Po
     const token = tokenAt(structure, document.offsetAt(position));
     if (!token?.name || !['word', 'symbol', 'literal', 'label'].includes(token.kind)) return null;
     const observed = session?.observation?.snapshot.bindings.find(b => b.name === token.name);
-    const candidates = structure.labels.filter(label => label.name === token.name);
     const builtin = catalog.bindings.find(b => b.name === token.name);
-    const parts: string[] = [];
-    if (observed) parts.push(description(observed, session!.evidence!));
-    if (candidates.length) parts.push(`Source label candidates at lines ${candidates.map(label => document.positionAt(label.start).line + 1).join(', ')}. Labels can occur in data; execution and binding are unknown.`);
-    if (!observed && builtin) parts.push(description(builtin,
-        `Default library documentation, Arturo ${catalog.runtimeVersion}; runtime binding may differ.`));
-    if (!parts.length) return null;
-    return { contents: { kind: MarkupKind.Markdown, value: parts.join('\n\n---\n\n') },
+    const binding = observed ?? builtin ?? sourceLabels(document, structure).find(b => b.name === token.name);
+    if (!binding) return null;
+    return { contents: { kind: MarkupKind.Markdown, value: description(binding) },
         range: Range.create(document.positionAt(token.start), document.positionAt(token.end)) };
 }
 
