@@ -30,7 +30,7 @@ jobs:
               run: bun install --frozen-lockfile
             
             - name: Check language server
-              run: bun run test
+              run: bun run lint && bun run test
             
             - name: Extract version from tag
               id: version
