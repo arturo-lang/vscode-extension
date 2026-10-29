@@ -25,8 +25,8 @@
 </p>
 
 ## Requirements
-- VS Code 1.52.0 or newer
-- Arturo available on your PATH (used for running, bundling, REPL, and package commands)
+- VS Code 1.82.0 or newer
+- Arturo 0.10.0 for runtime snapshots; Arturo on PATH for running, bundling, REPL, and package commands. Source editing features work without Arturo installed.
 
 See how to install Arturo on our [official website](https://arturo-lang.io/).
 
@@ -34,7 +34,9 @@ See how to install Arturo on our [official website](https://arturo-lang.io/).
 - Syntax highlighting for Arturo files.
 - Distinct file icons (gray for code, purple for tests/config) supporting both light and dark themes.
 - Ready-to-use snippets for core language constructs (arithmetic, collections, logic, IO, numbers, strings, types, and more)
-- One-click run of the active file, with diagnostics for runtime errors.
+- Runtime-assisted completion and hover, with explicit snapshot refresh and visible freshness.
+- Structural diagnostics, folding, label outlines, and candidate definition navigation.
+- One-click run of the active file in a terminal.
 - Built-in REPL launcher and bundler workflow.
 - Integrated package manager commands (install, uninstall, list, remote, update all).
 - Quick links to documentation and a prefilled issue reporter.
@@ -45,8 +47,10 @@ You can find these in the Command Palette (<kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd
 | Command | Purpose |
 | --- | --- |
 | Arturo: Open REPL | Launch an Arturo REPL in a new terminal |
-| Arturo: Run File | Choose any `.art` file in the workspace and run it with diagnostics |
-| Arturo: Run Current File | Run the active Arturo file; saves unsaved edits and surfaces errors inline |
+| Arturo: Run File | Choose any `.art` file in the workspace and run it in a terminal |
+| Arturo: Run Current File | Save and run the active Arturo file in a terminal |
+| Arturo: Refresh Runtime Snapshot | Execute the configured entrypoint and observe its completed global environment |
+| Arturo: Cancel Runtime Refresh | Stop the selected workspace's active refresh |
 | Arturo: Bundle File | Pick a script and produce a bundled executable (optional custom output name) |
 | Arturo: Manage Packages | Install, Uninstall, Update and Open Documentation of Packages |
 | Arturo: Open Documentation | Open the Arturo's Documentation on side-view |
@@ -63,7 +67,33 @@ You can find these in the Command Palette (<kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd
 
 ## Installation
 - From the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=drkameleon.arturo).
-- From source: clone the repo, run `npm install`, then `npm run compile`. Launch the extension host with <kbd>F5</kbd>. See [docs/Setup.md](docs/Setup.md) for full contributor setup.
+- From source: clone the repo, run `bun install`, then `bun run compile`. Launch the extension host with <kbd>F5</kbd>. See [docs/Setup.md](docs/Setup.md) for full contributor setup.
+
+## Runtime language intelligence
+
+Configure a saved entrypoint in your workspace settings:
+
+```json
+{
+  "arturo.runtime.entrypoint": "main.art",
+  "arturo.runtime.executable": "arturo",
+  "arturo.runtime.args": [],
+  "arturo.runtime.cwd": "",
+  "arturo.runtime.timeoutMs": 30000
+}
+```
+
+Entrypoint and working-directory paths resolve relative to the workspace folder. In a multi-folder workspace, each folder has its own configuration and snapshot. Trust the workspace and run **Arturo: Refresh Runtime Snapshot** to execute that entrypoint in a fresh process. Execution can perform the script's normal side effects. Editing, saving, hover, and completion never execute it. Unsaved edits are not executed; the runtime status bar shows stale when buffers differ from saved files or workspace files change. Its tooltip contains execution details and the freshness reason.
+
+Completion and hover show concise signatures, kinds, descriptions, attributes, and returns using runtime metadata or the bundled builtin catalog. Value bindings show compact signatures such as `greeting :string`. Source-only labels infer direct literal types; unresolved expressions and conflicting assignments show `:unknown` until runtime metadata is available. Execution details and freshness warnings stay in the status bar rather than the documentation popup. Runtime globals describe the end of the last successful run, not necessarily the binding at your cursor. Labels inside blocks can be data, and unknown words are not reported as static errors. Optional runtime parameter constraints appear as metadata; the server does not statically type-check Arturo.
+
+Source functions declared with `$[parameters][body]` or `function [parameters][body]` expose their parameter names and type constraints in hover and completion. For example, `double: $[x :integer][x * 2]` shows `double x :integer` and `Returns: Integer` without executing the function. Untyped parameters accept `:any`. Return inference covers simple literals, parameter references, arithmetic (`+`, `-`, `*`, `add`, `sub`, `mul`), and simple explicit `return` expressions. Complex bodies and control flow show `Returns: Unknown`. Labels assigned calls to these source functions inherit a single known return type: `x: double 5` shows `x :integer`. Nested calls and chains of assigned labels are supported; missing or incompatible arguments, ambiguous returns, and cyclic assignments remain `:unknown`.
+
+Signatures follow the [official library reference](https://arturo-lang.io/documentation/library/core/alias/): lowercase colon-prefixed types such as `:literal :block`, with each argument on its own aligned line.
+
+The harness loads your entrypoint with `do`: arguments and relative loads work, but `standalone?` is false and `script` exposes harness metadata. It observes completed globals, without invoking uncalled functions or custom value printers. Long-running and interactive applications are outside this first release. No snapshot is published after an error, early exit, timeout, or cancellation; an older observation remains visibly stale. Runtime failures are shown in **Arturo Language Server** output, with inline diagnostics only where saved-source locations can be verified. The existing terminal Run commands do not collect diagnostics.
+
+See [the language server guide](docs/LanguageServer.md) for other editors, protocol details, compatibility limits, and testing.
 
 ## Contributing
 

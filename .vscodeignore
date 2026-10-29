@@ -2,3 +2,10 @@
 .vscode-test/**
 .gitignore
 vsc-extension-quickstart.md
+src/**
+tests/**
+scripts/**
+tsconfig.json
+mise.toml
+bun.lock
+eslint.config.mjs

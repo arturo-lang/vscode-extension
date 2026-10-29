@@ -10,7 +10,7 @@ On the root folder, you'll find the project configuration files.
 
 - `README.md`: This shows the extension description and features. Not only on Github, but also on the Marketplace.
 - `package.json`: Default configuration file for NodeJS. This also is used to configure the extension. Don't worry too much, this file is generally big and will mix our extension settings with npm settings... Until I know, there is no way to decouple it.
-- `package-lock.json`: This is important for CI. Just don't remove it. This stores a "cache" of the package resolution.
+- `bun.lock`: Bun's dependency lockfile, used for reproducible installation in development and CI.
 - `tsconfig.json`: This project uses Typescript as source code, so we need this to configure Typescript correctly.
 - `mise.toml`: Mise settings to have the correct node version. See [Setup Instructions](./Setup.md) for more instructions.
 - `LICENSE`: License guarantee of usage.

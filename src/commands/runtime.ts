@@ -17,7 +17,7 @@ export const openRepl = () => {
 
 /** Prompts the user to select an Arturo script and runs it.
  * 
- * This runs with diagnostics enabled to capture and display any runtime errors.
+ * Runtime output appears in the terminal. Snapshot diagnostics use Refresh Runtime.
  * If no file is selected, the function exits without action.
  * */
 export const runFile = async () => {
@@ -31,7 +31,7 @@ export const runFile = async () => {
 
 /** Runs the currently active Arturo file in the editor.
  * 
- * This runs with diagnostics enabled to capture and display any runtime errors.
+ * Runtime output appears in the terminal. Snapshot diagnostics use Refresh Runtime.
  * If no active editor or the file is not an Arturo file, it shows a warning.
  * If the file is unsaved or has unsaved changes, it prompts to save before running.
  */
