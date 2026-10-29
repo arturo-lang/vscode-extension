@@ -1,0 +1,18 @@
+; Helper names are randomized by the adapter before this file is evaluated.
+lspDo: var 'do
+lspSymbols: var 'symbols
+lspKeys: var 'keys
+lspLoop: var 'loop
+lspInfo: var 'info
+lspSet: var 'set
+lspWrite: var 'write
+lspVersion: to :string sys\version
+; Compile this block only after the helper arities have been registered.
+do [
+    lspDo __ENTRYPOINT__
+    lspResult: #[]
+    lspLoop lspKeys lspSymbols 'lspName [
+        lspSet lspResult lspName lspInfo.get lspName
+    ]
+    lspWrite.json #[schemaVersion: 1 runtimeVersion: lspVersion bindings: lspResult] __RESULT__
+]

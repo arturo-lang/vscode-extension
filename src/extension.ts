@@ -3,13 +3,14 @@ import { command, Context } from "./helper"
 import { bundleFile, openRepl, runCurrentFile, runFile } from "./commands/runtime"
 import { openDocs, reportIssue } from "./commands/meta"
 import { managePackages } from "./commands/package"
+import { startLanguageClient, stopLanguageClient } from "./languageClient"
 
 
 /** Register commands for the Arturo VS Code extension on activate.
  * 
  * @param context - The extension context provided by VS Code.
  */
-export const activate = (context: Context) => {
+export const activate = async (context: Context) => {
 
     command(context, "arturo.runtime.repl", openRepl)
     command(context, "arturo.runtime.run", runFile)
@@ -20,11 +21,9 @@ export const activate = (context: Context) => {
 
     command(context, "arturo.meta.report-issue", reportIssue)
     command(context, "arturo.meta.open-docs", openDocs)
+    await startLanguageClient(context)
     
 }
 
-/** Deactivate the Arturo VS Code extension.
- * 
- *  Since there is no cleanup needed, this function is empty.
- */
-export const deactivate = () => {}
+/** Stop the language server and its active runtime processes. */
+export const deactivate = stopLanguageClient

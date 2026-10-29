@@ -237,7 +237,7 @@
     "vscode:prepublish": "bun run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "lint": "eslint -c .eslintrc.js --ext .ts ./src",
+    "lint": "eslint src",
     "test": "bun run compile && bun test tests",
     "catalog": "bun run compile && bun scripts/update-catalog.cjs"
   },
