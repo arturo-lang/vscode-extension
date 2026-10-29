@@ -4,7 +4,7 @@ import { URI } from 'vscode-uri';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CompletionItem, CompletionItemKind, Hover, Location, MarkupKind, Position, Range } from 'vscode-languageserver/node';
 import { Structure, tokenAt } from './document';
-import { sourceFunction } from './functions';
+import { sourceExpressionType, sourceFunction } from './functions';
 import { Binding, Snapshot } from './protocol';
 import { RuntimeSession } from './session';
 
@@ -33,7 +33,7 @@ function description(binding: Binding): string {
 
 function sourceLabels(document: TextDocument, structure: Structure): Binding[] {
     const source = document.getText();
-    const candidates = new Map<string, Binding[]>();
+    const candidates = new Map<string, { binding: Binding; next: number }[]>();
     for (let index = 0; index < structure.tokens.length; index++) {
         const label = structure.tokens[index];
         if (label.kind !== 'label') continue;
@@ -57,15 +57,30 @@ function sourceLabels(document: TextDocument, structure: Structure): Binding[] {
         const binding = ['$', 'function'].includes(text)
             ? sourceFunction(structure.tokens.slice(next).filter(t => t.kind !== 'comment'), source, label.name!) : undefined;
         const bindings = candidates.get(label.name!) ?? [];
-        bindings.push(binding ?? { name: label.name!, kind: type });
+        bindings.push({ binding: binding ?? { name: label.name!, kind: type }, next });
         candidates.set(label.name!, bindings);
     }
-    // Conflicting assignments and expressions need runtime information; do not guess.
-    return [...candidates].map(([name, bindings]) => {
+    const resolved = new Map<string, Binding>();
+    const resolving = new Set<string>();
+    const resolve = (name: string): Binding | undefined => {
+        if (resolved.has(name)) return resolved.get(name);
+        const definitions = candidates.get(name);
+        if (!definitions || resolving.has(name) || resolving.size > 32) return;
+        resolving.add(name);
+        const bindings = definitions.map(({ binding, next }) => {
+            if (binding.kind !== 'unknown') return binding;
+            const token = structure.tokens[next];
+            if (token?.kind !== 'word' && source.slice(token?.start, token?.end) !== '(') return binding;
+            return { ...binding, kind: sourceExpressionType(structure.tokens.slice(next), source, resolve) };
+        });
         const first = bindings[0];
-        return bindings.every(binding => JSON.stringify(binding) === JSON.stringify(first))
+        const binding = bindings.every(candidate => JSON.stringify(candidate) === JSON.stringify(first))
             ? first : { name, kind: 'unknown' };
-    });
+        resolving.delete(name);
+        resolved.set(name, binding);
+        return binding;
+    };
+    return [...candidates.keys()].map(name => resolve(name)!);
 }
 
 // Reflection reports Nothing for user functions even when they leave a value on the stack.

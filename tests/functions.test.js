@@ -83,3 +83,53 @@ describe('source function signatures', () => {
         expect(result.completion.documentation).toEqual(result.hover.contents);
     });
 });
+
+
+describe('labels assigned function results', () => {
+    function assigned(code, name = 'answer') {
+        const doc = TextDocument.create('file:///workspace/main.art', 'art', 1, `${code}\n${name}`);
+        const structure = analyze(doc);
+        const position = doc.positionAt(doc.getText().length);
+        const result = hover(doc, structure, position, undefined, catalog);
+        const completion = completions(doc, structure, position, undefined, catalog).find(item => item.label === name);
+        expect(completion.documentation).toEqual(result.contents);
+        return result.contents.value;
+    }
+    const double = 'double: $[x :integer][x * 2]';
+
+    test('propagates a user function return to declarations, references and completions', () => {
+        expect(assigned(`${double}\nanswer: double 5`)).toBe('```art\nanswer :integer\n```');
+        const doc = TextDocument.create('file:///workspace/main.art', 'art', 1, `${double}\nx: double 5`);
+        expect(hover(doc, analyze(doc), { line: 1, character: 0 }, undefined, catalog).contents.value)
+            .toBe('```art\nx :integer\n```');
+    });
+
+    test('nested calls, named argument values, aliases, and adjacent assignments', () => {
+        for (const expression of ['double double 5', '(double 5)', 'double 5 + 1']) {
+            expect(assigned(`${double}\nanswer: ${expression}`)).toBe('```art\nanswer :integer\n```');
+        }
+        expect(assigned(`${double}\ninput: 5\nintermediate: double input\nanswer: intermediate`))
+            .toBe('```art\nanswer :integer\n```');
+        expect(assigned(`${double} answer: double 5 other: "hello"`)).toBe('```art\nanswer :integer\n```');
+    });
+
+    test('uses string, floating, zero-argument and multi-argument function results', () => {
+        for (const [code, type] of [
+            ['greet: $[]["hello"] answer: greet', 'string'],
+            ['scale: $[x :integer][x * 2.5] answer: scale 5', 'floating'],
+            ['times: $[x :integer y :integer][x * y] answer: times 3 4', 'integer'],
+        ]) expect(assigned(code)).toBe(`\`\`\`art\nanswer :${type}\n\`\`\``);
+    });
+
+    test('unresolved calls, invalid arguments, ambiguous returns and cycles stay unknown', () => {
+        for (const code of [
+            `${double}\nanswer: double`, `${double}\nanswer: double "hello"`,
+            `${double}\nanswer: double missing`, 'answer: missing 5',
+            'f: $[x :integer :floating][x * 2] answer: f 5',
+            'f: $[][unknown] answer: f', 'f: $[][] answer: f',
+            'answer: other other: answer', 'answer: answer',
+            `${double}\ndouble: 42\nanswer: double 5`,
+            `${double}\nanswer: double 5\nanswer: "hello"`,
+        ]) expect(assigned(code)).toBe('```art\nanswer :unknown\n```');
+    });
+});

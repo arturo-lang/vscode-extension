@@ -195,7 +195,7 @@ Returns: Function`;
             ['"Hello, World!"', 'string'], ['{Hello}', 'string'], ['42', 'integer'],
             ['3.14', 'floating'], ['true', 'logical'], ['null', 'null'],
             ["'a'", 'char'], ['[1 2]', 'block'], [':string', 'type'],
-            ["'hello", 'literal'], ['add 1 2', 'unknown'], ['(add 1 2)', 'unknown'],
+            ["'hello", 'literal'], ['add 1 2', 'integer'], ['(add 1 2)', 'integer'],
             ['"unfinished', 'unknown'],
         ]) {
             const doc = document(`greeting: ${value}\ngreeting`);

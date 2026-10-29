@@ -33,7 +33,10 @@ const title = (type: string) => type.charAt(0).toUpperCase() + type.slice(1);
 const numeric = new Set(['Integer', 'Floating']);
 
 /** Infer only complete, simple expressions whose operand types are known. */
-function resultType(body: Value[], args: Record<string, string[]>, depth = 0): string[] {
+type ResolveBinding = (name: string) => Binding | undefined;
+
+function resultType(body: Value[], args: Record<string, string[]>, depth = 0,
+    resolve: ResolveBinding = () => undefined, complete = true): string[] {
     if (depth > 32 || body.length > 256) return ['Unknown'];
     let index = 0;
     const arithmetic = (left: string[], right: string[]): string[] => {
@@ -44,7 +47,7 @@ function resultType(body: Value[], args: Record<string, string[]>, depth = 0): s
     const atom = (): string[] => {
         const value = body[index++];
         if (!value) return ['Unknown'];
-        if (value.text === '(') return resultType(value.children!, args, depth + 1);
+        if (value.text === '(') return resultType(value.children!, args, depth + 1, resolve);
         if (value.text === '[') return ['Block'];
         if (value.token.kind === 'string') return [value.text.startsWith('{/') ? 'Regex' : 'String'];
         if (value.token.kind === 'type') return ['Type'];
@@ -58,6 +61,17 @@ function resultType(body: Value[], args: Record<string, string[]>, depth = 0): s
             if (Object.prototype.hasOwnProperty.call(args, value.text)) return args[value.text];
             if (['true', 'false', 'maybe'].includes(value.text)) return ['Logical'];
             if (value.text === 'null') return ['Null'];
+            const binding = resolve(value.text);
+            if (binding?.kind === 'function') {
+                for (const accepted of Object.values(binding.args ?? {})) {
+                    if (index >= body.length) return ['Unknown'];
+                    const actual = expression();
+                    if (actual.includes('Unknown') || !actual.every(type =>
+                        accepted.includes('Any') || accepted.includes(type))) return ['Unknown'];
+                }
+                return binding.returns?.length ? binding.returns : ['Unknown'];
+            }
+            if (binding) return [title(binding.kind)];
             if (['add', 'sub', 'mul'].includes(value.text)) return arithmetic(expression(), expression());
         }
         return ['Unknown'];
@@ -74,7 +88,7 @@ function resultType(body: Value[], args: Record<string, string[]>, depth = 0): s
     if (body[0]?.text === 'return' && body[0].token.kind === 'word') index++;
     if (!body.length) return ['Nothing'];
     const result = expression();
-    return index === body.length ? result : ['Unknown'];
+    return index <= body.length && (!complete || index === body.length) ? result : ['Unknown'];
 }
 
 /** Recognize the literal function and $ constructors without running source. */
@@ -112,4 +126,20 @@ export function sourceFunction(tokens: Token[], source: string, name: string): B
     }
     for (const parameter of Object.keys(args)) if (!args[parameter].length) args[parameter] = ['Any'];
     return { name, kind: 'function', args, returns: resultType(parts[1].children!, args) };
+}
+
+/** Infer the first expression after a label; adjacent statements are independent. */
+export function sourceExpressionType(tokens: Token[], source: string, resolve: ResolveBinding): string {
+    const expression: Token[] = [];
+    let depth = 0;
+    for (const token of tokens) {
+        if (token.kind === 'comment') continue;
+        if (!depth && (token.kind === 'label' || token.kind === 'close')) break;
+        if (token.kind === 'open') depth++;
+        if (token.kind === 'close') depth--;
+        expression.push(token);
+    }
+    const body = values(expression, source);
+    const types = body ? resultType(body, {}, 0, resolve, false) : ['Unknown'];
+    return types.length === 1 && !['Any', 'Nothing'].includes(types[0]) ? types[0].toLowerCase() : 'unknown';
 }

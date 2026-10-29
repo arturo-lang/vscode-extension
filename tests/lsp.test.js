@@ -98,13 +98,18 @@ test('standard stdio source features work without trust or an installed runtime 
             expect(hover.contents.value).not.toContain('Default library documentation');
             rpc.notify('textDocument/didChange', {
                 textDocument: { uri: file, version: 2 },
-                contentChanges: [{ text: 'double: $[x :integer][ x * 2 ]\ndouble' }],
+                contentChanges: [{ text: 'double: $[x :integer][ x * 2 ]\ndouble\nx: double 5\nx' }],
             });
             const userFunction = await rpc.request('textDocument/hover', {
                 textDocument: { uri: file }, position: { line: 1, character: 2 },
             });
             expect(userFunction.contents.value)
                 .toBe('```art\ndouble x :integer\n```\n\nFunction\n\nReturns: Integer');
+            const assigned = await rpc.request('textDocument/hover', {
+                textDocument: { uri: file }, position: { line: 3, character: 0 },
+            });
+            expect(assigned.contents.value).toBe('```art\nx :integer\n```');
+
 
         }
         const result = await rpc.request('workspace/executeCommand', { 
