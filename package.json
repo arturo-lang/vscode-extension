@@ -1,13 +1,13 @@
 {
   "name": "arturo",
   "displayName": "Arturo",
-  "description": "Syntax highlighting for the Arturo programming language",
+  "description": "Runtime-assisted language intelligence, syntax highlighting, and tools for Arturo",
   "version": "0.9.4",
   "publisher": "drkameleon",
   "repository": "https://github.com/arturo-lang/vscode-extension",
   "icon": "icons/gray.png",
   "engines": {
-    "vscode": "^1.52.0"
+    "vscode": "^1.82.0"
   },
   "activationEvents": [
     "onLanguage:art",
@@ -17,7 +17,11 @@
     "onCommand:arturo.runtime.bundle",
     "onCommand:arturo.meta.report-issue",
     "onCommand:arturo.meta.open-docs",
-    "onCommand:arturo.package.manage"
+    "onCommand:arturo.package.manage",
+    "onLanguage:art-test",
+    "onLanguage:art-config",
+    "onCommand:arturo.runtime.refresh",
+    "onCommand:arturo.runtime.cancel"
   ],
   "categories": [
     "Programming Languages"
@@ -53,6 +57,14 @@
       {
         "command": "arturo.package.manage",
         "title": "Arturo: Manage Packages"
+      },
+      {
+        "command": "arturo.runtime.refresh",
+        "title": "Arturo: Refresh Runtime Snapshot"
+      },
+      {
+        "command": "arturo.runtime.cancel",
+        "title": "Arturo: Cancel Runtime Refresh"
       }
     ],
     "menus": {
@@ -179,20 +191,81 @@
         "language": "art",
         "path": "./snippets/types.json"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Arturo",
+      "properties": {
+        "arturo.runtime.executable": {
+          "type": "string",
+          "default": "arturo",
+          "description": "Path to Arturo 0.10.0. Used only by explicit runtime refresh.",
+          "scope": "resource"
+        },
+        "arturo.runtime.entrypoint": {
+          "type": "string",
+          "default": "",
+          "description": "Saved entrypoint path, absolute or relative to the workspace folder. No entrypoint is inferred.",
+          "scope": "resource"
+        },
+        "arturo.runtime.args": {
+          "type": "array",
+          "default": [],
+          "description": "Arguments passed to the entrypoint without shell interpolation.",
+          "scope": "resource",
+          "items": {
+            "type": "string"
+          }
+        },
+        "arturo.runtime.cwd": {
+          "type": "string",
+          "default": "",
+          "description": "Working directory, absolute or relative to the workspace folder. Defaults to that folder.",
+          "scope": "resource"
+        },
+        "arturo.runtime.timeoutMs": {
+          "type": "integer",
+          "default": 30000,
+          "description": "Maximum runtime execution time in milliseconds.",
+          "scope": "resource",
+          "minimum": 100,
+          "maximum": 3600000
+        }
+      }
+    }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "bun run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "lint": "eslint -c .eslintrc.js --ext .ts ./src"
+    "lint": "eslint -c .eslintrc.js --ext .ts ./src",
+    "test": "bun run compile && bun test tests",
+    "catalog": "bun run compile && bun scripts/update-catalog.cjs"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
-    "@types/vscode": "^1.51.0",
+    "@types/vscode": "1.82.0",
     "@typescript-eslint/eslint-plugin": "^8.67.0",
     "@typescript-eslint/parser": "^8.67.0",
     "eslint": "^10.9.0",
     "typescript": "^5.9.3"
-  }
+  },
+  "dependencies": {
+    "vscode-languageclient": "9.0.1",
+    "vscode-languageserver": "9.0.1",
+    "vscode-languageserver-textdocument": "1.0.12",
+    "vscode-uri": "3.1.0"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Source features work without trust. Runtime execution requires workspace trust.",
+      "restrictedConfigurations": [
+        "arturo.runtime"
+      ]
+    },
+    "virtualWorkspaces": {
+      "supported": false
+    }
+  },
+  "packageManager": "bun@1.3.12"
 }
