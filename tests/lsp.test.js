@@ -137,7 +137,7 @@ test('standard stdio source features work without trust or an installed runtime 
 
         let hover = await rpc.request('textDocument/hover', query);
 
-        expect(hover.contents.value).toBe('runtimeOnly\n\nInteger');
+        expect(hover.contents.value).toBe('```art\nruntimeOnly :integer\n```');
 
         await refresh(folders[1]);
         const items = await rpc.request('textDocument/completion', query);
@@ -147,7 +147,7 @@ test('standard stdio source features work without trust or an installed runtime 
         rpc.notify('textDocument/didChange', { textDocument: { uri: file, version: 2 }, contentChanges: [{ text: 'runtimeOnly' }] });
         hover = await rpc.request('textDocument/hover', query);
         
-        expect(hover.contents.value).toBe('runtimeOnly\n\nInteger');
+        expect(hover.contents.value).toBe('```art\nruntimeOnly :integer\n```');
         expect(runtimeStatus(folders[0])).toMatchObject({
             state: 'stale', staleReason: 'Document content changed or opened; refresh to observe saved files',
         });
@@ -158,17 +158,17 @@ test('standard stdio source features work without trust or an installed runtime 
         const staleItems = await rpc.request('textDocument/completion', query);
         const runtimeItem = staleItems.find(item => item.label === 'runtimeOnly');
         expect(runtimeItem.detail).toBe('Integer');
-        expect(runtimeItem.documentation.value).toBe('runtimeOnly\n\nInteger');
+        expect(runtimeItem.documentation.value).toBe('```art\nruntimeOnly :integer\n```');
         
         rpc.notify('workspace/didChangeWatchedFiles', { changes: [{ uri: uri(path.join(root, 'one', 'dependency.art')), type: 2 }] });
         hover = await rpc.request('textDocument/hover', query);
         
-        expect(hover.contents.value).toBe('runtimeOnly\n\nInteger');
+        expect(hover.contents.value).toBe('```art\nruntimeOnly :integer\n```');
         expect(runtimeStatus(folders[0])).toMatchObject({ state: 'stale', staleReason: 'Workspace files changed' });
 
         rpc.notify('workspace/didChangeConfiguration', { settings: {} });
         hover = await rpc.request('textDocument/hover', query);
-        expect(hover.contents.value).toBe('runtimeOnly\n\nInteger');
+        expect(hover.contents.value).toBe('```art\nruntimeOnly :integer\n```');
         expect(runtimeStatus(folders[0])).toMatchObject({ state: 'stale', staleReason: 'Runtime configuration changed' });
         
         settings.set(folders[0].uri, { ...settings.get(folders[0].uri), entrypoint: 'slow.art' });

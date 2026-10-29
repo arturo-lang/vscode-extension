@@ -166,7 +166,7 @@ Returns: Function`;
         session.status = { workspaceUri: session.workspaceUri, generation: 2, state: 'ready' };
         const doc = document('loop: 42\nloop'), structure = analyze(doc), position = { line: 1, character: 4 };
         const ready = hover(doc, structure, position, session, catalog);
-        expect(ready.contents.value).toBe('loop\n\nInteger');
+        expect(ready.contents.value).toBe('```art\nloop :integer\n```');
         session.invalidate('Runtime configuration changed');
         expect(notifications.at(-1)).toMatchObject({ state: 'stale', staleReason: 'Runtime configuration changed' });
         expect(hover(doc, structure, position, session, catalog)).toEqual(ready);
@@ -176,18 +176,38 @@ Returns: Function`;
         expect(completion.sortText).toBe('0loop');
     });
 
-    test('source labels show only distinct line locations, without inferring a type', () => {
+    test('source labels infer literal types without internal location information', () => {
         const doc = document('local: 1 local: 2\n[local: 3]\nlocal'), structure = analyze(doc);
         const position = { line: 2, character: 5 };
         const result = hover(doc, structure, position, undefined, catalog);
-        expect(result.contents.value).toBe('local\n\nSource label\n\nLines: 1, 2');
+        expect(result.contents.value).toBe('```art\nlocal :integer\n```');
         const completion = completions(doc, structure, position, undefined, catalog).find(item => item.label === 'local');
-        expect(completion.detail).toBe('Source label');
+        expect(completion.detail).toBe('Integer');
         expect(completion.documentation).toEqual(result.contents);
         expect(completion.sortText).toBe('1local');
         const single = document('local: 1');
         expect(hover(single, analyze(single), { line: 0, character: 1 }, undefined, catalog).contents.value)
-            .toBe('local\n\nSource label\n\nLine: 1');
+            .toBe('```art\nlocal :integer\n```');
+    });
+
+    test('label hovers show concise types on declarations and references', () => {
+        for (const [value, type] of [
+            ['"Hello, World!"', 'string'], ['{Hello}', 'string'], ['42', 'integer'],
+            ['3.14', 'floating'], ['true', 'logical'], ['null', 'null'],
+            ["'a'", 'char'], ['[1 2]', 'block'], [':string', 'type'],
+            ["'hello", 'literal'], ['add 1 2', 'unknown'], ['(add 1 2)', 'unknown'],
+            ['"unfinished', 'unknown'],
+        ]) {
+            const doc = document(`greeting: ${value}\ngreeting`);
+            const structure = analyze(doc);
+            for (const line of [0, 1]) {
+                expect(hover(doc, structure, { line, character: 2 }, undefined, catalog).contents.value)
+                    .toBe(`\`\`\`art\ngreeting :${type}\n\`\`\``);
+            }
+        }
+        const doc = document('greeting: "Hello"\ngreeting: 42\ngreeting');
+        expect(hover(doc, analyze(doc), { line: 2, character: 2 }, undefined, catalog).contents.value)
+            .toBe('```art\ngreeting :unknown\n```');
     });
 
     test('builtin hover omits redundant source label information', () => {

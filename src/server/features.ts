@@ -15,14 +15,15 @@ const displayKind = (binding: Binding) => binding.kind.charAt(0).toUpperCase() +
 function description(binding: Binding): string {
     const args = Object.entries(binding.args ?? {}).map(([name, types]) =>
         [name, ...types.map(type => `:${type.toLowerCase()}`)].join(' '));
-    const signature = args.length
+    const value = binding.kind !== 'function' && !args.length;
+    const signature = value ? `${binding.name} :${binding.kind.toLowerCase()}` : args.length
         ? `${binding.name} ${args.join(`\n${' '.repeat(binding.name.length + 1)}`)}` : binding.name;
     // A code block preserves argument alignment and Arturo type syntax in Markdown.
     const fence = '`'.repeat(Math.max(3, ...Array.from(signature.matchAll(/`+/g), match => match[0].length + 1)));
-    const usage = binding.kind === 'function' || args.length
-        ? `${fence}art\n${signature}\n${fence}` : escaped(signature);
+    const usage = `${fence}art\n${signature}\n${fence}`;
     const attributes = Object.entries(binding.attrs ?? {}).map(([name, attr]) =>
         `.${name} (${attr.types.join(', ')})${attr.description ? `: ${attr.description}` : ''}`);
+    if (value) return usage;
     return `${usage}\n\n${escaped(displayKind(binding))}`
         + (binding.description ? `\n\n${escaped(binding.description)}` : '')
         + (attributes.length ? `\n\nAttributes:\n\n${attributes.map(a => `- ${escaped(a)}`).join('\n')}` : '')
@@ -30,14 +31,35 @@ function description(binding: Binding): string {
 }
 
 function sourceLabels(document: TextDocument, structure: Structure): Binding[] {
-    const locations = new Map<string, Set<number>>();
-    for (const label of structure.labels) {
-        const lines = locations.get(label.name!) ?? new Set<number>();
-        lines.add(document.positionAt(label.start).line + 1);
-        locations.set(label.name!, lines);
+    const source = document.getText();
+    const types = new Map<string, Set<string>>();
+    for (let index = 0; index < structure.tokens.length; index++) {
+        const label = structure.tokens[index];
+        if (label.kind !== 'label') continue;
+        let next = index + 1;
+        while (structure.tokens[next]?.kind === 'comment') next++;
+        const token = structure.tokens[next];
+        const text = token ? source.slice(token.start, token.end) : '';
+        let type = 'unknown';
+        if (token?.kind === 'string' && !structure.diagnostics.some(diagnostic =>
+            document.offsetAt(diagnostic.range.start) === token.start)) {
+            type = text.startsWith('{/') ? 'regex' : 'string';
+        } else if (token?.kind === 'value') {
+            if (text.startsWith("'")) type = 'char';
+            else if (/^(?:0[xob][0-9a-fA-F]+|[0-9]+)$/.test(text)) type = 'integer';
+            else if (/^[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$/.test(text)) type = 'floating';
+        } else if (token?.kind === 'open' && text === '[') type = 'block';
+        else if (token?.kind === 'type') type = 'type';
+        else if (token?.kind === 'literal') type = 'literal';
+        else if (token?.kind === 'word' && ['true', 'false', 'maybe'].includes(text)) type = 'logical';
+        else if (token?.kind === 'word' && text === 'null') type = 'null';
+        const candidates = types.get(label.name!) ?? new Set<string>();
+        candidates.add(type);
+        types.set(label.name!, candidates);
     }
-    return [...locations].map(([name, lines]) => ({
-        name, kind: 'source label', description: `${lines.size === 1 ? 'Line' : 'Lines'}: ${[...lines].join(', ')}`,
+    // Conflicting assignments and expressions need runtime information; do not guess.
+    return [...types].map(([name, candidates]) => ({
+        name, kind: candidates.size === 1 ? [...candidates][0] : 'unknown',
     }));
 }
 
